@@ -52,9 +52,9 @@
     "tar-fs": "^1.16.3"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.2.13",
-    "@types/node": "^7.0.62",
-    "electron": "^25.3.0",
+    "@electron/rebuild": "^3.6.1",
+    "@types/node": "^22.21.0",
+    "electron": "^34.5.1",
     "eslint": "^7.28.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-only-warn": "^1.0.2",
@@ -70,28 +70,14 @@
   "supportedTargets": [
     [
       "electron",
-      "25.0.0",
-      "116"
-    ],
-    [
-      "electron",
-      "24.0.0",
-      "114"
-    ],
-    [
-      "electron",
-      "23.0.0",
-      "113"
-    ],
-    [
-      "electron",
-      "22.0.0",
-      "110"
+      "34.0.0",
+      "115"
     ],
     [
       "node",
-      "18.0.0",
-      "108"
+      "20.0.0",
+      "115"
     ]
+    
   ]
 }
