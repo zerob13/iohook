@@ -7,7 +7,6 @@ const argv = require('minimist')(process.argv.slice(2), {
   string: ['version', 'runtime', 'abi'],
 });
 const pkg = require('./package.json');
-const nodeAbi = require('node-abi');
 const { optionsFromPackage } = require('./helpers');
 
 let arch = process.env.ARCH
@@ -18,50 +17,57 @@ let gypJsPath = path.join(
   __dirname,
   'node_modules',
   '.bin',
-  process.platform === 'win32' ? 'node-gyp.cmd' : 'node-gyp'
+  process.platform === 'win32' ? 'node-gyp.cmd' : 'node-gyp',
 );
 
 let files = [];
 let targets;
-let chain = Promise.resolve();
 
-initBuild();
+// Wrap the main logic in an async function
+async function main() {
+  // Dynamically import node-abi
+  const nodeAbi = (await import('node-abi')).default;
 
-function initBuild() {
+  // initBuild(); // Call the initialization logic inside the async function
+
   // Check if a specific runtime has been specified from the command line
   if ('runtime' in argv && 'version' in argv && 'abi' in argv) {
     targets = [[argv['runtime'], argv['version'], argv['abi']]];
   } else if ('all' in argv) {
     // If "--all", use those defined in package.json
-    targets = require('./package.json').supportedTargets;
+    // Ensure supportedTargets is defined or imported if necessary
+    const supportedTargets = pkg.supportedTargets || [];
+    targets = supportedTargets;
   } else {
     const options = optionsFromPackage();
     if (process.env.npm_config_targets) {
       options.targets = options.targets.concat(
-        process.env.npm_config_targets.split(',')
+        process.env.npm_config_targets.split(','),
       );
     }
     options.targets = options.targets.map((targetStr) => targetStr.split('-'));
     if (process.env.npm_config_targets === 'all') {
+      // Ensure supportedTargets is defined or imported if necessary
+      const supportedTargets = pkg.supportedTargets || [];
       options.targets = supportedTargets.map((arr) => [arr[0], arr[2]]);
       options.platforms = ['win32', 'darwin', 'linux'];
       options.arches = ['x64', 'ia32'];
     }
     if (process.env.npm_config_platforms) {
       options.platforms = options.platforms.concat(
-        process.env.npm_config_platforms.split(',')
+        process.env.npm_config_platforms.split(','),
       );
     }
     if (process.env.npm_config_arches) {
       options.arches = options.arches.concat(
-        process.env.npm_config_arches.split(',')
+        process.env.npm_config_arches.split(','),
       );
     }
 
     if (options.targets.length > 0) {
       targets = options.targets.map((e) => [
         e[0],
-        nodeAbi.getTarget(e[1], e[0]),
+        nodeAbi.getTarget(e[1], e[0]), // Use imported nodeAbi here
         e[1],
       ]);
     } else {
@@ -72,33 +78,26 @@ function initBuild() {
     }
   }
 
-  targets.forEach((parts) => {
+  cpGyp(); // Copy gyp files before looping
+
+  // Use async/await for sequential builds
+  for (const parts of targets) {
     let runtime = parts[0];
     let version = parts[1];
     let abi = parts[2];
-    chain = chain
-      .then(function () {
-        return build(runtime, version, abi);
-      })
-      .then(function () {
-        return tarGz(runtime, abi);
-      })
-      .catch((err) => {
-        console.error(err);
-        process.exit(1);
-      });
-  });
+    try {
+      await build(runtime, version, abi);
+      await tarGz(runtime, abi); // Changed to await, assuming tarGz might become async
+    } catch (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  }
 
-  // chain = chain.then(function () {
-  //   if ('upload' in argv && argv['upload'] === 'false') {
-  //     // If no upload has been specified, don't attempt to upload
-  //     return;
-  //   }
-
-  //   return uploadFiles(files);
-  // });
-
-  cpGyp();
+  // Optional: Upload logic (if needed)
+  // if (!('upload' in argv && argv['upload'] === 'false')) {
+  //   await uploadFiles(files);
+  // }
 }
 
 function cpGyp() {
@@ -111,21 +110,21 @@ function cpGyp() {
     case 'darwin':
       fs.copySync(
         path.join(__dirname, 'build_def', process.platform, 'binding.gyp'),
-        path.join(__dirname, 'binding.gyp')
+        path.join(__dirname, 'binding.gyp'),
       );
       fs.copySync(
         path.join(__dirname, 'build_def', process.platform, 'uiohook.gyp'),
-        path.join(__dirname, 'uiohook.gyp')
+        path.join(__dirname, 'uiohook.gyp'),
       );
       break;
     default:
       fs.copySync(
         path.join(__dirname, 'build_def', 'linux', 'binding.gyp'),
-        path.join(__dirname, 'binding.gyp')
+        path.join(__dirname, 'binding.gyp'),
       );
       fs.copySync(
         path.join(__dirname, 'build_def', 'linux', 'uiohook.gyp'),
-        path.join(__dirname, 'uiohook.gyp')
+        path.join(__dirname, 'uiohook.gyp'),
       );
       break;
   }
@@ -223,7 +222,7 @@ function tarGz(runtime, abi) {
       file: tarPath,
       sync: true,
     },
-    FILES_TO_ARCHIVE[process.platform]
+    FILES_TO_ARCHIVE[process.platform],
   );
 }
 
@@ -261,3 +260,9 @@ function tarGz(runtime, abi) {
 //     });
 //   });
 // }
+
+// Execute the main async function
+main().catch((err) => {
+  console.error('Unhandled error in main:', err);
+  process.exit(1);
+});
